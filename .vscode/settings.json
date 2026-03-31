@@ -1,0 +1,29 @@
+{
+    "cSpell.words": [
+        "cflags",
+        "emcmake",
+        "EMSCRIPTEN",
+        "emsdk",
+        "GLFW",
+        "ICONIFIED",
+        "imgui",
+        "pthread",
+        "rvsim",
+        "stdlib",
+        "tuasananh",
+        "Wextra"
+    ],
+    "cSpell.ignorePaths": [
+        "package-lock.json",
+        "node_modules",
+        "vscode-extension",
+        ".git/{info,lfs,logs,refs,objects}/**",
+        ".git/{index,*refs,*HEAD}",
+        ".vscode",
+        ".vscode-insiders",
+        "external"
+    ],
+    "clangd.arguments": [
+        "--query-driver=**/*"
+    ],
+}
