@@ -1,6 +1,13 @@
 # `rvsim` Master Architecture & Checkpointed Implementation Roadmap
 
-> **Status:** Planning baseline (no checkpoints started yet). Check off items as each checkpoint lands and passes verification.
+> **Status:** Checkpoints 0–3 complete (RV32I/RV64I core, assembler, `rvsim-cli`, and the interactive IDE on Native + Web). Next: Checkpoint 4. Check off items as each checkpoint lands and passes verification.
+>
+> **Implementation notes (Checkpoints 0–3):**
+> - `ECALL`/`EBREAK` are returned by `Execute()` as `ExecStatus` values and dispatched by `Machine` to the `ExecutionEnvironment`, so `Execute()` takes no environment parameter. An ecall that needs console input returns `kWaitForInput` and is re-executed once input arrives.
+> - Additional core files: `core/registers.h` (ABI names), `core/encoder.{h,cpp}` (range-checked encoding shared by the assembler and tests), and `env/buffered_console.{h,cpp}` (in-memory `ConsoleIo` used by the controller and tests).
+> - `SimulationController` accepts both address breakpoints and source-line breakpoints; line breakpoints are remapped through the source map on every assembly so `Assemble` + `Run` issued together stop correctly.
+> - In the assembler, integer-literal branch/jump targets are byte offsets, while symbolic targets are absolute addresses. `li` expansion reproduces GNU `as` `load_const` (verified against binutils 2.45).
+> - The Checkpoint 3 browser checks ran against headless Chromium over the DevTools protocol, because the `chrome-devtools` MCP server requires Google Chrome at `/opt/google/chrome`.
 
 ## Table of Contents
 
@@ -189,10 +196,10 @@ rvsim/
 
 | Status | CP | Title | Key Deliverable | Primary Verification Gate |
 |---|---|---|---|---|
-| `[ ]` | **0** | Build System, `rvsim_core` Split, Testing & CI | `rvsim_core`, `rvsim_tests`, `rvsim-cli` stub, `native-asan` preset, CI `ctest` | All 4 presets build + `ctest` + ASan green |
-| `[ ]` | **1** | Core Machine, Sparse RAM & RV32I/RV64I Engine | `CpuState`, `PagedRam`, `MemoryBus`, RV32I/64I decode/exec/disasm, RARS env | Unit tests for all I instructions vs Compiler Explorer encodings |
-| `[ ]` | **2** | GNU `gas` Assembler (Base I) & Working `rvsim-cli` | Two-pass assembler, directives, pseudos, source map, diagnostics, CLI runner | Assemble & run multi-function RV32I/RV64I `.s` programs |
-| `[ ]` | **3** | **First Interactive IDE Vertical Slice** | Thread-safe `SimulationController`, full ImGui workspace, Editor/Regs/Mem/Disasm/Console | Write, assemble, step, debug RV32I/RV64I in Native & Web (Chrome DevTools) |
+| `[x]` | **0** | Build System, `rvsim_core` Split, Testing & CI | `rvsim_core`, `rvsim_tests`, `rvsim-cli` stub, `native-asan` preset, CI `ctest` | All 4 presets build + `ctest` + ASan green |
+| `[x]` | **1** | Core Machine, Sparse RAM & RV32I/RV64I Engine | `CpuState`, `PagedRam`, `MemoryBus`, RV32I/64I decode/exec/disasm, RARS env | Unit tests for all I instructions vs Compiler Explorer encodings |
+| `[x]` | **2** | GNU `gas` Assembler (Base I) & Working `rvsim-cli` | Two-pass assembler, directives, pseudos, source map, diagnostics, CLI runner | Assemble & run multi-function RV32I/RV64I `.s` programs |
+| `[x]` | **3** | **First Interactive IDE Vertical Slice** | Thread-safe `SimulationController`, full ImGui workspace, Editor/Regs/Mem/Disasm/Console | Write, assemble, step, debug RV32I/RV64I in Native & Web (Chrome DevTools) |
 | `[ ]` | **4** | ELF32/ELF64 Loader & Linux/Newlib Syscalls | Bounds-checked ELF loader, symbol table, Linux/Newlib `ecall` ABI, stack init | Run real GCC/Clang-compiled RV32I/RV64I C ELF binaries in CLI & IDE |
 | `[ ]` | **5** | `M`, `A`, `Zicsr` & `Zifencei` Extensions | Mul/Div/Rem, `lr`/`sc` + AMOs, `CsrFile`, CSR instructions, CSR UI tab | Unit tests (div edge cases, LR/SC invalidation, CSR RO/RW) + ELF tests |
 | `[ ]` | **6** | `C` (16-bit Compressed) & Decode Cache | RV32C/RV64C decoder/expander, 2-byte alignment, Disasm & Asm support, decode cache | Compressed ELFs (`-march=rv{32,64}imac`) + mixed 16/32-bit stepping |
@@ -209,20 +216,20 @@ rvsim/
 
 **Objective:** Establish the decoupled target graph, host unit-testing infrastructure, sanitizer preset, and CI test gates before writing simulator logic.
 
-- [ ] **Refactor [CMakeLists.txt](CMakeLists.txt) to explicit, target-scoped source lists:**
+- [x] **Refactor [CMakeLists.txt](CMakeLists.txt) to explicit, target-scoped source lists:**
   - `rvsim_core` (`STATIC`): pure C++23 simulator sources in `src/simulator/` with `-Wall -Wextra` (`/W4` on MSVC), zero ImGui/GLFW/Emscripten dependencies.
   - `rvsim` (GUI executable): links `rvsim_core`, `imgui_lib`, `imgui_text_editor`, `rvsim_platform`.
   - `rvsim-cli` (Native-only executable, `if(NOT EMSCRIPTEN)`): `src/cli/main.cpp`, links `rvsim_core`.
   - `rvsim_tests` (Native-only, `option(RVSIM_BUILD_TESTS "Build unit tests" ON)` when `NOT EMSCRIPTEN`): fetches `google/googletest` (`v1.17.0`) via `CPMAddPackage`, uses `enable_testing()`, `include(GoogleTest)`, and `gtest_discover_tests(rvsim_tests)`.
   - Add `option(RVSIM_ENABLE_SANITIZERS "Enable ASan + UBSan" OFF)` applying `-fsanitize=address,undefined -fno-omit-frame-pointer` on GCC/Clang native builds.
   - Rename [src/windows/editor.cpp](src/windows/editor.cpp) to `src/windows/editor_window.cpp` for filename consistency with [src/windows/editor_window.h](src/windows/editor_window.h).
-- [ ] **Update [CMakePresets.json](CMakePresets.json):**
+- [x] **Update [CMakePresets.json](CMakePresets.json):**
   - Add `native-asan` configure and build preset (`Debug` + `RVSIM_ENABLE_SANITIZERS=ON`).
   - Add `testPresets` for `native-debug`, `native-release`, and `native-asan`.
-- [ ] **Update [.github/workflows/ci.yml](.github/workflows/ci.yml):**
+- [x] **Update [.github/workflows/ci.yml](.github/workflows/ci.yml):**
   - Run `ctest --preset native-release --output-on-failure` on Linux, Windows, and macOS jobs.
   - Add a Linux `native-asan` build + `ctest` step to catch memory/UB regressions on every push and PR.
-- [ ] **Create core namespace & stub targets:**
+- [x] **Create core namespace & stub targets:**
   - Create `src/simulator/core/types.h` (`Xlen`, `IsaExtensions`, `Error`, `std::expected` helpers).
   - Align [src/simulator/simulator.h](src/simulator/simulator.h) and [src/simulator/simulator.cpp](src/simulator/simulator.cpp) into `namespace rvsim`.
   - Create minimal `src/cli/main.cpp` and `tests/unit/smoke_test.cpp` verifying `rvsim_core` links and executes cleanly.
@@ -237,23 +244,23 @@ rvsim/
 
 **Objective:** Implement the foundational CPU state, sparse 4 KiB paged memory bus, complete RV32I + RV64I decoder/executor/disassembler, and RARS/Venus user-mode `ecall` environment.
 
-- [ ] **CPU State (`src/simulator/core/cpu_state.h`):**
+- [x] **CPU State (`src/simulator/core/cpu_state.h`):**
   - `CpuState`: `Xlen xlen`, `IsaExtensions extensions`, `std::array<uint64_t, 32> x`, `std::array<uint64_t, 32> f`, `uint64_t pc`, `PrivilegeMode priv`, `uint64_t cycle`, `uint64_t instret`, and reservation state placeholder.
   - Helpers `ReadReg(uint8_t idx)` and `WriteReg(uint8_t idx, uint64_t val)` enforcing `x0 == 0` and 32-bit masking in `Xlen::k32`.
-- [ ] **Sparse Memory (`src/simulator/memory/paged_ram.{h,cpp}`, `mmio_device.h`, `memory_bus.{h,cpp}`):**
+- [x] **Sparse Memory (`src/simulator/memory/paged_ram.{h,cpp}`, `mmio_device.h`, `memory_bus.{h,cpp}`):**
   - Sparse 4 KiB page storage (`kPageSize = 4096`) with 4-entry direct-mapped lookup cache, bulk `WriteRegion()` / `ReadRegion()`, and page enumeration API for the Memory Inspector.
   - Little-endian `Read8/16/32/64` & `Write8/16/32/64` returning `std::expected<T, Trap>`, plus configurable alignment policy (`strict_alignment`: `false` by default for user-mode compatibility, `true` when strict traps are requested).
-- [ ] **Decode & Disassemble (`src/simulator/core/instruction.h`, `decoder.{h,cpp}`, `disassembler.{h,cpp}`):**
+- [x] **Decode & Disassemble (`src/simulator/core/instruction.h`, `decoder.{h,cpp}`, `disassembler.{h,cpp}`):**
   - Full RV32I (40 instructions) + RV64I (+12: `LWU`, `LD`, `SD`, `ADDIW`, `SLLIW`, `SRLIW`, `SRAIW`, `ADDW`, `SUBW`, `SLLW`, `SRLW`, `SRAW`): `LUI`, `AUIPC`, `JAL`, `JALR`, `BEQ`–`BGEU`, `LB`–`LHU`/`LWU`/`LD`, `SB`–`SW`/`SD`, `ADDI`–`SRAI`, `ADD`–`AND`, `FENCE`, `ECALL`, `EBREAK`.
   - Canonical disassembler consuming `DecodedInst` and formatting ABI names (configurable numeric `xN` vs ABI `a0`/`sp`/`ra`).
-- [ ] **Execution Engine (`src/simulator/core/executor.{h,cpp}`):**
+- [x] **Execution Engine (`src/simulator/core/executor.{h,cpp}`):**
   - `template <Xlen kXlen> StepOutcome Execute(CpuState&, MemoryBus&, const DecodedInst&, ExecutionEnvironment&)`.
   - Exact RISC-V semantics: `JALR` clears bit 0 of target address; RV32 shift amounts use `rs2 & 0x1F`, RV64 uses `rs2 & 0x3F`, and `*W` instructions mask shift amounts with `0x1F` and sign-extend 32-bit results to 64 bits.
-- [ ] **RARS/Venus Environment & Machine Facade (`src/simulator/env/environment.h`, `rars_env.{h,cpp}`, `src/simulator/runtime/machine.{h,cpp}`):**
+- [x] **RARS/Venus Environment & Machine Facade (`src/simulator/env/environment.h`, `rars_env.{h,cpp}`, `src/simulator/runtime/machine.{h,cpp}`):**
   - `ConsoleIo` interface (`WriteStdout`, `WriteStderr`, `ReadLine`, `ReadChar`, `NeedsInput` state so interactive console stdin never deadlocks the UI).
   - RARS/Venus `ecall` codes in `a7`: `1` PrintInt, `4` PrintString, `5` ReadInt, `8` ReadString, `9` Sbrk, `10` Exit, `11` PrintChar, `12` ReadChar, `34` PrintHex, `35` PrintBin, `36` PrintUnsigned, `93` Exit2.
   - Synchronous `Machine` tying `CpuState`, `MemoryBus`, `ExecutionEnvironment`, `Step()`, `Run(max_steps)`, and `Reset()`.
-- [ ] **Unit Tests:**
+- [x] **Unit Tests:**
   - `tests/unit/memory_test.cpp`, `tests/unit/decoder_i_test.cpp`, `tests/unit/executor_i_test.cpp`, `tests/unit/rars_env_test.cpp` verified against Compiler Explorer (`riscv32`/`riscv64` GCC/Clang) golden encodings, boundary arithmetic (`INT32_MIN`, `INT64_MIN`, unsigned wraparound, negative branch offsets, `x0` immutability), and RARS syscall round-trips.
 
 **Exit Criteria:**
@@ -265,18 +272,18 @@ rvsim/
 
 **Objective:** Build the two-pass GNU `gas`-compatible single-file assembler with rich source-line mapping and diagnostics, and wire `rvsim-cli` to assemble and execute `.s` programs end-to-end.
 
-- [ ] **Program Image (`src/simulator/loader/program_image.h`):**
+- [x] **Program Image (`src/simulator/loader/program_image.h`):**
   - `ProgramImage`: `Xlen xlen`, `uint64_t entry_point`, `uint64_t initial_gp`, `uint64_t initial_sp`, `std::vector<Segment>` (`.text`, `.rodata`, `.data`, `.bss`), bidirectional symbol table (`name -> address`, `address -> symbol`), `SourceMap` (`pc <-> line_number`), optional `tohost_addr`.
   - `Diagnostic` struct: `Severity` (`Error`/`Warning`), `int line` (1-based), `int column`, `std::string message`.
-- [ ] **Lexer & Pseudo-Instruction Expander (`src/simulator/loader/asm_lexer.{h,cpp}`, `asm_pseudo.{h,cpp}`):**
+- [x] **Lexer & Pseudo-Instruction Expander (`src/simulator/loader/asm_lexer.{h,cpp}`, `asm_pseudo.{h,cpp}`):**
   - Tokenize labels, local numeric labels (`1:`, `1f`, `1b`), directives, registers (`x0`–`x31`, `zero`–`t6`, `fp`), numeric/char literals (decimal, `0x`, `0b`, `0o`, `'a'`, constant arithmetic `+`/`-`/`*`/`/`/`<<`/`>>`/`|`/`&`), escaped strings, relocation modifiers (`%hi(...)`, `%lo(...)`, `%pcrel_hi(...)`, `%pcrel_lo(...)`), and `#` / `//` / `/* */` comments.
   - Expand standard base pseudo-instructions: `nop`, `li` (full 32-bit and 64-bit expansion for RV32 vs RV64), `la`, `mv`, `not`, `neg`, `negw`, `sext.w`, `seqz`, `snez`, `sltz`, `sgtz`, `beqz`, `bnez`, `blez`, `bgez`, `bltz`, `bgtz`, `bgt`, `ble`, `bgtu`, `bleu`, `j`, `jal offset` (implicit `ra`), `jr`, `jalr rs` (implicit `ra`), `ret`, `call`, `tail`.
-- [ ] **Two-Pass Assembler (`src/simulator/loader/assembler.{h,cpp}`):**
+- [x] **Two-Pass Assembler (`src/simulator/loader/assembler.{h,cpp}`):**
   - **Pass 1:** Track active section (`.text`, `.data`, `.rodata`, `.bss`), process `.equ`/`.set`, `.globl`/`.global`, `.align`/`.balign`/`.p2align`, `.byte`/`.half`/`.word`/`.dword`/`.ascii`/`.asciz`/`.string`/`.zero`/`.space`, record symbol addresses and local numeric label instances, and compute exact instruction/pseudo byte sizes & source-line associations.
   - **Pass 2:** Lay out sections into default memory regions (`.text` @ `0x00400000`, `.rodata` + `.data` + `.bss` @ `0x10000000` in user-mode, or configurable base addresses), resolve symbols, local `1f`/`1b` labels, and `%hi`/`%lo`/`%pcrel_hi`/`%pcrel_lo`, validate immediate ranges, emit machine code, and collect **all** diagnostics (recovering across lines instead of aborting on the first syntax error).
-- [ ] **Working CLI (`src/cli/main.cpp`):**
+- [x] **Working CLI (`src/cli/main.cpp`):**
   - Implement `rvsim-cli run <file.s>` and `rvsim-cli assemble <file.s> --disasm` with flags `--arch rv32i|rv64i`, `--env rars`, `--max-steps N`, `--dump-regs`, `--trace`.
-- [ ] **Tests (`tests/unit/assembler_test.cpp`, `tests/integration/asm_programs_test.cpp`):**
+- [x] **Tests (`tests/unit/assembler_test.cpp`, `tests/integration/asm_programs_test.cpp`):**
   - Bit-for-bit comparison against Compiler Explorer (`riscv32`/`riscv64` GNU `as`) output for every base instruction, pseudo-instruction, relocation, and local label pattern.
   - End-to-end execution of recursive factorial, Fibonacci, quicksort over `.data` array, and string I/O via RARS `ecall`.
 
@@ -290,15 +297,15 @@ rvsim/
 
 **Objective:** Deliver the first end-to-end interactive IDE experience: write RV32I/RV64I assembly, assemble (`Ctrl+B`), see syntax highlighting & inline error markers, set breakpoints, step/run on a worker thread, and inspect Registers, Disassembly, Memory/Stack, and Console I/O live on Desktop and WebAssembly.
 
-- [ ] **Thread-Safe Controller (`src/simulator/runtime/controller.{h,cpp}`):**
+- [x] **Thread-Safe Controller (`src/simulator/runtime/controller.{h,cpp}`):**
   - `SimulationController` owns a `Machine` on one dedicated `std::thread` with command queue (`std::mutex` + `std::condition_variable`) for `Assemble`, `Run`, `Pause`, `StepIn`, `Reset`, `SetBreakpoints`, `SetSpeedHz`, `SendConsoleInput`, `WriteRegister`, `WriteMemory`, and `SetConfig`.
   - Throttled `UiSnapshot` publisher (~60 Hz while `Running`, immediate on `Step`/`Pause`/`Halt`/`WaitingForInput`/`Error`) carrying `CpuState`, previous register snapshot (for changed-value highlighting), run state, stop reason, diagnostics, symbols, source map, console buffer, and requested memory viewport slice.
   - Clean RAII shutdown joining the worker thread in destructor (safe on both Native and Emscripten).
-- [ ] **UI Design System & Workspace Shell (`src/ui/`):**
+- [x] **UI Design System & Workspace Shell (`src/ui/`):**
   - `design_tokens.h`: centralized colors, spacing scale, typography helpers, and semantic tokens (WCAG ≥ 4.5:1 text contrast): active PC highlight, breakpoint gutter dot, changed register accent, error/warning/info badges, running/paused/halted pills.
   - `riscv_language.{h,cpp}`: custom `TextEditor::Language` highlighting RISC-V mnemonics, ABI/numeric registers, assembler directives, numbers/hex literals, strings, labels, and `#`/`//` comments.
   - `workspace.{h,cpp}`: Menu Bar (`File`, `Edit`, `View`, `Simulate`, `Help`), Execution Toolbar (`RV32`/`RV64` selector, Environment selector, `Assemble`, `Run`/`Pause`, `Step`, `Reset`, Speed slider), first-run `DockBuilder` default layout + `View → Reset Layout`, Bottom Status Bar (state, arch, PC, cycle/instret, effective Hz/MIPS), and keyboard shortcuts (`F5`, `F11`, `F9`, `Ctrl+B`, `Ctrl+R`) respecting `io.WantTextInput`.
-- [ ] **Wire Context, App & Panels (`src/context.{h,cpp}`, `src/app.{h,cpp}`, `src/main.cpp`, `src/windows/`):**
+- [x] **Wire Context, App & Panels (`src/context.{h,cpp}`, `src/app.{h,cpp}`, `src/main.cpp`, `src/windows/`):**
   - Remove the unsafe placeholder `StartCompilation()` worker in [src/context.cpp](src/context.cpp); connect [src/context.h](src/context.h) to `SimulationController` and poll one frame-consistent `UiSnapshot` per frame in [src/app.cpp](src/app.cpp).
   - Hide [src/windows/demo_window.h](src/windows/demo_window.h) behind `Help → Dear ImGui Demo`.
   - Upgrade `EditorWindow`: RISC-V syntax highlighting, clickable breakpoint gutter & current-PC arrow (`TextEditor::SetLineDecorator`), assembler error tooltips (`TextEditor::AddMarker`), read-only lock while running, and dirty indicator when edited after assemble.

@@ -1,8 +1,13 @@
 #include "windows/demo_window.h"
+
 #include "imgui.h"
 
 namespace rvsim {
+
 void DemoWindow::Render() {
-  ImGui::ShowDemoWindow();
+  if (visible()) {
+    ImGui::ShowDemoWindow(visible_ptr());
+  }
 }
+
 }  // namespace rvsim

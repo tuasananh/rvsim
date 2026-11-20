@@ -73,3 +73,40 @@ emrun build/web/index.html
 ```
 
 > **Note on Web multi-threading (`-pthread`):** Because `rvsim` uses WebAssembly pthreads (`SharedArrayBuffer`), static hosts require a Secure Context (`https://` or `http://localhost`). `web/coi-serviceworker.js` is bundled automatically so deployments on static hosts such as GitHub Pages can enable Cross-Origin Isolation.
+
+## Using the IDE
+
+Write RISC-V assembly (GNU `as` syntax) in the **Editor**, then:
+
+| Shortcut | Action |
+|---|---|
+| `Ctrl+B` | Assemble (errors appear inline and in **Console → Diagnostics**) |
+| `F5` | Run / Continue / Pause |
+| `F11` | Step one instruction |
+| `F9` (or click the gutter) | Toggle a breakpoint on the current line |
+| `Ctrl+R` | Reset the program |
+
+The toolbar selects **RV32I / RV64I** and the run speed (1 Hz to Max). Programs use RARS/Venus-style `ecall` services (`a7` = 1 PrintInt, 4 PrintString, 5 ReadInt, 8 ReadString, 9 Sbrk, 10 Exit, 11 PrintChar, 12 ReadChar, 34 PrintHex, 35 PrintBin, 36 PrintUnsigned, 93 Exit with code); program input is typed into **Console I/O**. The **Disassembly**, **Registers**, and **Memory / Stack** panels update live, highlighting values changed by the last step.
+
+## Command-Line Runner (`rvsim-cli`, native only)
+
+```bash
+./build/native-release/rvsim-cli run tests/testdata/fibonacci.s --dump-regs
+./build/native-release/rvsim-cli run program.s --arch rv64i --trace --max-steps 100000
+./build/native-release/rvsim-cli assemble program.s --disasm
+```
+
+`run` exits with the program's exit code (1 on a runtime fault or step limit, 2 on usage or assembly errors).
+
+## Tests
+
+Native builds include a GoogleTest suite (`rvsim_tests`) and CLI checks:
+
+```bash
+ctest --preset native-release --output-on-failure
+
+# AddressSanitizer + UndefinedBehaviorSanitizer (GCC/Clang)
+cmake --preset native-asan
+cmake --build --preset native-asan
+ctest --preset native-asan --output-on-failure
+```

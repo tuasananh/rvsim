@@ -27,6 +27,17 @@
       }
     },
     {
+      "name": "native-asan",
+      "displayName": "Native Debug + ASan/UBSan",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/native-asan",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "RVSIM_ENABLE_SANITIZERS": "ON"
+      }
+    },
+    {
       "name": "web",
       "displayName": "Web (Emscripten via EMSDK)",
       "generator": "Ninja",
@@ -63,12 +74,48 @@
       "configurePreset": "native-release"
     },
     {
+      "name": "native-asan",
+      "configurePreset": "native-asan"
+    },
+    {
       "name": "web",
       "configurePreset": "web"
     },
     {
       "name": "web-emcmake",
       "configurePreset": "web-emcmake"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "native-debug",
+      "configurePreset": "native-debug",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "native-release",
+      "configurePreset": "native-release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "native-asan",
+      "configurePreset": "native-asan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
     }
   ]
 }

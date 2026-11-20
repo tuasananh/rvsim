@@ -47,6 +47,9 @@ jobs:
           cmake --preset native-release
           cmake --build --preset native-release
 
+      - name: Run tests (Native Release)
+        run: ctest --preset native-release --output-on-failure
+
       - name: Package Linux release archive
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
@@ -59,6 +62,43 @@ jobs:
         with:
           name: release-linux
           path: dist/rvsim-linux-x86_64.tar.gz
+
+  test-linux-asan:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Linux graphics and windowing dev libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            pkg-config
+
+      - name: Cache CPM sources
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/cpm-cache
+          key: cpm-${{ runner.os }}-${{ hashFiles('CMakeLists.txt', 'cmake/get_cpm.cmake') }}
+          restore-keys: |
+            cpm-${{ runner.os }}-
+
+      - name: Configure and build (Native ASan + UBSan)
+        env:
+          CXX: g++-14
+        run: |
+          cmake --preset native-asan
+          cmake --build --preset native-asan
+
+      - name: Run tests (Native ASan + UBSan)
+        run: ctest --preset native-asan --output-on-failure
 
   build-windows:
     runs-on: windows-latest
@@ -86,6 +126,9 @@ jobs:
         run: |
           cmake --preset native-release
           cmake --build --preset native-release
+
+      - name: Run tests (Native Release)
+        run: ctest --preset native-release --output-on-failure
 
       - name: Package Windows release archive
         if: startsWith(github.ref, 'refs/tags/v')
@@ -118,6 +161,9 @@ jobs:
         run: |
           cmake --preset native-release
           cmake --build --preset native-release
+
+      - name: Run tests (Native Release)
+        run: ctest --preset native-release --output-on-failure
 
       - name: Package macOS release archive
         if: startsWith(github.ref, 'refs/tags/v')

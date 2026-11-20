@@ -9,11 +9,18 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
+#include "ui/design_tokens.h"
 
 namespace rvsim {
 
 void ErrorCallback(int error, const char* description) {
-  std::println(stderr, "OpenGL Error[{}]: {}", error, description);
+  if (error == 0) {
+    // Informational notices (e.g. unsupported window hints in the
+    // Emscripten GLFW port) are not errors.
+    std::println("GLFW notice: {}", description);
+    return;
+  }
+  std::println(stderr, "GLFW error {}: {}", error, description);
 }
 
 App::App(std::shared_ptr<Context> context) : context_(context) {
@@ -93,13 +100,10 @@ App::App(std::shared_ptr<Context> context) : context_(context) {
   context_->set_sans_font(sans_font);
   context_->set_monospace_font(mono_font);
 
-  ImGui::StyleColorsDark();
+  // Theme + fixed size scale (changing DPI requires re-applying the theme).
+  ui::ApplyTheme(main_scale);
 
   ImGuiStyle& style = ImGui::GetStyle();
-  style.ScaleAllSizes(
-      main_scale);  // Bake a fixed style scale. (until we have a solution for
-                    // dynamic style scaling, changing this requires resetting
-                    // Style + calling this again)
   style.FontScaleDpi =
       main_scale;  // Set initial font scale. (in docking branch: using
                    // io.ConfigDpiScaleFonts=true automatically overrides this
@@ -111,9 +115,13 @@ App::App(std::shared_ptr<Context> context) : context_(context) {
   ImGui_ImplGlfw_InstallEmscriptenCallbacks(window_, "#canvas");
 #endif
   ImGui_ImplOpenGL3_Init(glsl_version);
+
+  workspace_ = std::make_unique<ui::Workspace>(context_);
 }
 
 App::~App() {
+  windows_.clear();
+  workspace_.reset();
   ImGui_ImplOpenGL3_Shutdown();
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
@@ -131,7 +139,7 @@ void App::Loop() {
   io.IniFilename = nullptr;
   EMSCRIPTEN_MAINLOOP_BEGIN
 #else
-  while (!glfwWindowShouldClose(window_))
+  while (!glfwWindowShouldClose(window_) && !context_->quit_requested)
 #endif
   {
     // Poll and handle events (inputs, window resize, etc.)
@@ -156,7 +164,8 @@ void App::Loop() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::DockSpaceOverViewport();
+    context_->BeginFrame();
+    workspace_->Render();
 
     for (const auto& window : windows_) {
       window->Render();
@@ -182,8 +191,11 @@ void App::Loop() {
 #endif
 }
 
-void App::RegisterWindow(std::unique_ptr<Window> window) {
+Window* App::RegisterWindow(std::unique_ptr<Window> window) {
+  Window* raw = window.get();
+  workspace_->AddPanel(raw);
   windows_.emplace_back(std::move(window));
+  return raw;
 }
 
 }  // namespace rvsim
